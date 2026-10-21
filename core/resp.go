@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 )
 
 // reads the length typically the first integer of the string
@@ -79,6 +80,19 @@ func readArray(data []byte) (any, int, error) {
 	return elems, pos, nil
 }
 
+func DecodeArrayString(data []byte) ([]string, error) {
+	val, err := Decode(data)
+	if err != nil {
+		return nil, err
+	}
+	temp := val.([]any)
+	tokens := make([]string, len(temp))
+	for i := range tokens {
+		tokens[i] = temp[i].(string)
+	}
+	return tokens, nil
+}
+
 func DecodeOne(data []byte) (any, int, error) {
 	if len(data) == 0 {
 		return nil, 0, errors.New("no data")
@@ -104,4 +118,15 @@ func Decode(data []byte) (any, error) {
 	}
 	value, _, err := DecodeOne(data)
 	return value, err
+}
+
+func Encode(val any, isSimple bool) []byte {
+	switch v := val.(type) {
+	case string:
+		if isSimple {
+			return fmt.Appendf(nil, "+%s\r\n", v)
+		}
+		return fmt.Appendf(nil, "$%d\r\n%s\r\n", len(v), v)
+	}
+	return []byte{}
 }

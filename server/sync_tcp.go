@@ -1,22 +1,29 @@
 package server
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/shreeda448/cacheGo.git/config"
+	"github.com/shreeda448/cacheGo.git/core"
 )
 
-func respond(cmd string, cli net.Conn) error {
-	if _, err := cli.Write([]byte(cmd)); err != nil {
-		return err
-	}
-	return nil
+func respondError(err error, cli net.Conn) {
+	cli.Write([]byte(fmt.Sprintf("-%s\r\n", err)))
 }
 
-func readCommand(cli net.Conn) (string, error) {
+func respond(cmd *core.RedisCmd, cli net.Conn) {
+	err := core.EvalAndRespond(cmd, cli)
+	if err != nil {
+		respondError(err, cli)
+	}
+}
+
+func readCommand(cli net.Conn) (*core.RedisCmd, error) {
 	// TODO: Max read in one shot is 512 bytes
 	// To allow input > 512 bytes , then repeated read until
 	// we get EOF or designated delimiter
@@ -24,9 +31,16 @@ func readCommand(cli net.Conn) (string, error) {
 	buf := make([]byte, 512)
 	n, err := cli.Read(buf[:])
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(buf[:n]), nil
+	tokens, err := core.DecodeArrayString(buf[:n])
+	if err != nil {
+		return nil, err
+	}
+	return &core.RedisCmd{
+		Cmd:  strings.ToUpper(tokens[0]),
+		Args: tokens[1:],
+	}, nil
 }
 
 func RunSyncTCPServer() {
@@ -58,10 +72,7 @@ func RunSyncTCPServer() {
 				}
 				log.Println("err", err)
 			}
-			log.Println("cmd", cmd)
-			if err = respond(cmd, cli); err != nil {
-				log.Println("err write:", err)
-			}
+			respond(cmd, cli)
 		}
 	}
 }
