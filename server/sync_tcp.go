@@ -12,18 +12,18 @@ import (
 	"github.com/shreeda448/cacheGo.git/core"
 )
 
-func respondError(err error, cli net.Conn) {
-	cli.Write([]byte(fmt.Sprintf("-%s\r\n", err)))
+func respondError(err error, cli io.ReadWriter) {
+	_, _ = fmt.Fprintf(cli, "-%s\r\n", err)
 }
 
-func respond(cmd *core.RedisCmd, cli net.Conn) {
+func respond(cmd *core.RedisCmd, cli io.ReadWriter) {
 	err := core.EvalAndRespond(cmd, cli)
 	if err != nil {
 		respondError(err, cli)
 	}
 }
 
-func readCommand(cli net.Conn) (*core.RedisCmd, error) {
+func readCommand(cli io.ReadWriter) (*core.RedisCmd, error) {
 	// TODO: Max read in one shot is 512 bytes
 	// To allow input > 512 bytes , then repeated read until
 	// we get EOF or designated delimiter

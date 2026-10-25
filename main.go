@@ -17,5 +17,5 @@ func setupFlags() {
 func main() {
 	setupFlags()
 	log.Println("Let's Go, cacheGo")
-	server.RunSyncTCPServer()
+	server.RunAsyncTCPServer()
 }
