@@ -127,6 +127,10 @@ func Encode(val any, isSimple bool) []byte {
 			return fmt.Appendf(nil, "+%s\r\n", v)
 		}
 		return fmt.Appendf(nil, "$%d\r\n%s\r\n", len(v), v)
+	case int64:
+		res := make([]byte, 0)
+		res = fmt.Appendf(res, ":%d\r\n", val)
+		return res
 	}
 	return []byte{}
 }
