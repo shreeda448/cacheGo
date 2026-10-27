@@ -16,3 +16,9 @@ go build
 - GET command
 - SET command with expiration time flag
 - TTL command
+
+### Future Features
+
+- Key eviction
+- Pub Sub
+- Atomic operations/Transactions
