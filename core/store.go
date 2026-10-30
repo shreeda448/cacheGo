@@ -1,6 +1,10 @@
 package core
 
-import "time"
+import (
+	"time"
+
+	"github.com/shreeda448/cacheGo.git/config"
+)
 
 var store map[string]*Obj
 
@@ -25,9 +29,26 @@ func NewObj(val any, t int64) *Obj {
 }
 
 func Put(key string, obj *Obj) {
+	if len(store) >= config.KeysLimit {
+		evict()
+	}
 	store[key] = obj
 }
 
 func Get(key string) *Obj {
-	return store[key]
+	val := store[key]
+	if val != nil && val.ExpiresAt != -1 && val.ExpiresAt <= time.Now().UnixMilli() {
+		delete(store, key)
+		return nil
+	}
+	return val
+}
+
+func Del(key string) bool {
+	_, ok := store[key]
+	if ok {
+		delete(store, key)
+		return true
+	}
+	return false
 }

@@ -1,6 +1,7 @@
 package config
 
 var (
-	Host string = "0.0.0.0"
-	Port int    = 7379
+	Host      string = "0.0.0.0"
+	Port      int    = 7379
+	KeysLimit int    = 5
 )

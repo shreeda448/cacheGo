@@ -74,7 +74,7 @@ func evalSET(cmdArgs []string, cli io.ReadWriter) error {
 
 	// putting the key and value in a hash table
 	Put(key, NewObj(val, exDurationMs))
-	cli.Write([]byte("+OK\r\n"))
+	cli.Write(Encode("OK", true))
 	return nil
 }
 
@@ -88,13 +88,13 @@ func evalTTL(cmdArgs []string, cli io.ReadWriter) error {
 
 	// if key does not exist in the hash map, return RESP encoded -2 denoting the key does not exist
 	if obj == nil {
-		cli.Write([]byte(":-2\r\n"))
+		cli.Write(Encode(-2, false))
 		return nil
 	}
 
 	// if object exists, but no expiration is set then send -1
 	if obj.ExpiresAt == -1 {
-		cli.Write([]byte(":-1\r\n"))
+		cli.Write(Encode(-1, false))
 		return nil
 	}
 
@@ -104,11 +104,43 @@ func evalTTL(cmdArgs []string, cli io.ReadWriter) error {
 
 	// if key expired i.e. durTTL <=0 key does not exist return -2
 	if durTTL < 0 {
-		cli.Write([]byte(":-2\r\n"))
+		cli.Write(Encode(-2, false))
 		return nil
 	}
 
 	cli.Write(Encode(int64(durTTL/1000), false))
+	return nil
+}
+
+func evalDEL(cmdArgs []string, cli io.ReadWriter) error {
+	deleted := 0
+	for _, key := range cmdArgs {
+		ok := Del(key)
+		if ok {
+			deleted++
+		}
+	}
+	cli.Write(Encode(deleted, false))
+	return nil
+}
+
+func evalEXPIRE(cmdArgs []string, cli io.ReadWriter) error {
+	if len(cmdArgs) != 2 {
+		return errors.New("(error) ERR wrong number of arguments for 'expire' command")
+	}
+	key := cmdArgs[0]
+	exDurationSec, err := strconv.ParseInt(cmdArgs[1], 10, 64)
+	if err != nil {
+		return errors.New("(error) ERR value is not an integer or out of range ")
+	}
+	val := Get(key)
+	if val == nil {
+		// key does not exist in the hashmap
+		cli.Write(Encode(0, false))
+		return nil
+	}
+	val.ExpiresAt = time.Now().UnixMilli() + exDurationSec*1000
+	cli.Write(Encode(1, false))
 	return nil
 }
 
@@ -122,6 +154,10 @@ func EvalAndRespond(cmd *RedisCmd, cli io.ReadWriter) error {
 		return evalSET(cmd.Args, cli)
 	case "TTL":
 		return evalTTL(cmd.Args, cli)
+	case "DEL":
+		return evalDEL(cmd.Args, cli)
+	case "EXPIRE":
+		return evalEXPIRE(cmd.Args, cli)
 	default:
 		return evalPing(cmd.Args, cli)
 	}

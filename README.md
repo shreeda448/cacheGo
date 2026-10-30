@@ -16,9 +16,14 @@ go build
 - GET command
 - SET command with expiration time flag
 - TTL command
+- DEL command
+- Simple Key eviction strategy
+- Expire command
+- Auto deletion after expiration
+- Lazy deletion
 
 ### Future Features
 
-- Key eviction
 - Pub Sub
 - Atomic operations/Transactions
+- LRU and LFU key eviction strategies
