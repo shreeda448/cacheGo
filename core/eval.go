@@ -1,31 +1,38 @@
 package core
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"strconv"
 	"time"
 )
 
-var RESP_NIL []byte = []byte("$-1\r\n")
+var (
+	RESP_NIL     []byte = []byte("$-1\r\n")
+	RESP_OK      []byte = []byte("+OK\r\n")
+	RESP_ZERO    []byte = []byte(":0\r\n")
+	RESP_ONE     []byte = []byte(":1\r\n")
+	RESP_MINUS_1 []byte = []byte(":-1\r\n")
+	RESP_MINUS_2 []byte = []byte(":-2\r\n")
+)
 
-func evalPing(cmdArgs []string, cli io.ReadWriter) error {
+func evalPing(cmdArgs []string) []byte {
 	var b []byte
 	if len(cmdArgs) >= 2 {
-		return errors.New("ERR wrong number of arguments for 'ping' command")
+		return Encode(errors.New("ERR wrong number of arguments for 'ping' command"), false)
 	}
 	if len(cmdArgs) == 0 {
 		b = Encode("PONG", true)
 	} else {
 		b = Encode(cmdArgs[0], false)
 	}
-	_, err := cli.Write(b)
-	return err
+	return b
 }
 
-func evalGET(cmdArgs []string, cli io.ReadWriter) error {
+func evalGET(cmdArgs []string) []byte {
 	if len(cmdArgs) != 1 {
-		return errors.New("(error) ERR wrong number of arguments for 'get' command")
+		return Encode(errors.New("(error) ERR wrong number of arguments for 'get' command"), false)
 	}
 	key := cmdArgs[0]
 
@@ -34,24 +41,21 @@ func evalGET(cmdArgs []string, cli io.ReadWriter) error {
 
 	// if key does not exist,return RESP encoded nil
 	if obj == nil {
-		cli.Write(RESP_NIL)
-		return nil
+		return RESP_NIL
 	}
 
 	// if key already expired then return nil
 	if obj.ExpiresAt != -1 && obj.ExpiresAt <= time.Now().UnixMilli() {
-		cli.Write(RESP_NIL)
-		return nil
+		return RESP_NIL
 	}
 
 	// return the RESP encoded value
-	cli.Write(Encode(obj.Value, false))
-	return nil
+	return Encode(obj.Value, false)
 }
 
-func evalSET(cmdArgs []string, cli io.ReadWriter) error {
+func evalSET(cmdArgs []string) []byte {
 	if len(cmdArgs) <= 1 {
-		return errors.New("(error) ERR wrong number of arguments for 'set' command")
+		return Encode(errors.New("(error) ERR wrong number of arguments for 'set' command"), false)
 	}
 	var exDurationMs int64 = -1
 	key, val := cmdArgs[0], cmdArgs[1]
@@ -60,27 +64,26 @@ func evalSET(cmdArgs []string, cli io.ReadWriter) error {
 		case "EX", "ex":
 			i++
 			if i == len(cmdArgs) {
-				return errors.New("(error) ERR syntax error")
+				return Encode(errors.New("(error) ERR syntax error"), false)
 			}
 			exDurationSec, err := strconv.ParseInt(cmdArgs[3], 10, 64)
 			if err != nil {
-				return errors.New("(error) ERR value is not an integer or out of range ")
+				return Encode(errors.New("(error) ERR value is not an integer or out of range "), false)
 			}
 			exDurationMs = exDurationSec * 1000
 		default:
-			return errors.New("(error) ERR syntax error")
+			return Encode(errors.New("(error) ERR syntax error"), false)
 		}
 	}
 
 	// putting the key and value in a hash table
 	Put(key, NewObj(val, exDurationMs))
-	cli.Write(Encode("OK", true))
-	return nil
+	return RESP_OK
 }
 
-func evalTTL(cmdArgs []string, cli io.ReadWriter) error {
+func evalTTL(cmdArgs []string) []byte {
 	if len(cmdArgs) != 1 {
-		return errors.New("(error) ERR wrong number of arguments for 'ttl' command")
+		return Encode(errors.New("(error) ERR wrong number of arguments for 'ttl' command"), false)
 	}
 	key := cmdArgs[0]
 
@@ -88,14 +91,12 @@ func evalTTL(cmdArgs []string, cli io.ReadWriter) error {
 
 	// if key does not exist in the hash map, return RESP encoded -2 denoting the key does not exist
 	if obj == nil {
-		cli.Write(Encode(-2, false))
-		return nil
+		return RESP_MINUS_2
 	}
 
 	// if object exists, but no expiration is set then send -1
 	if obj.ExpiresAt == -1 {
-		cli.Write(Encode(-1, false))
-		return nil
+		return RESP_MINUS_1
 	}
 
 	// compute the time remaining for the key to expire and
@@ -104,15 +105,13 @@ func evalTTL(cmdArgs []string, cli io.ReadWriter) error {
 
 	// if key expired i.e. durTTL <=0 key does not exist return -2
 	if durTTL < 0 {
-		cli.Write(Encode(-2, false))
-		return nil
+		return RESP_MINUS_2
 	}
 
-	cli.Write(Encode(int64(durTTL/1000), false))
-	return nil
+	return Encode(int64(durTTL/1000), false)
 }
 
-func evalDEL(cmdArgs []string, cli io.ReadWriter) error {
+func evalDEL(cmdArgs []string) []byte {
 	deleted := 0
 	for _, key := range cmdArgs {
 		ok := Del(key)
@@ -120,45 +119,50 @@ func evalDEL(cmdArgs []string, cli io.ReadWriter) error {
 			deleted++
 		}
 	}
-	cli.Write(Encode(deleted, false))
-	return nil
+	return Encode(deleted, false)
 }
 
-func evalEXPIRE(cmdArgs []string, cli io.ReadWriter) error {
+func evalEXPIRE(cmdArgs []string) []byte {
 	if len(cmdArgs) != 2 {
-		return errors.New("(error) ERR wrong number of arguments for 'expire' command")
+		return Encode(errors.New("(error) ERR wrong number of arguments for 'expire' command"), false)
 	}
 	key := cmdArgs[0]
 	exDurationSec, err := strconv.ParseInt(cmdArgs[1], 10, 64)
 	if err != nil {
-		return errors.New("(error) ERR value is not an integer or out of range ")
+		return Encode(errors.New("(error) ERR value is not an integer or out of range "), false)
 	}
 	val := Get(key)
 	if val == nil {
 		// key does not exist in the hashmap
-		cli.Write(Encode(0, false))
-		return nil
+		return Encode(0, false)
 	}
 	val.ExpiresAt = time.Now().UnixMilli() + exDurationSec*1000
-	cli.Write(Encode(1, false))
-	return nil
+	return Encode(1, false)
 }
 
-func EvalAndRespond(cmd *RedisCmd, cli io.ReadWriter) error {
-	switch cmd.Cmd {
-	case "PING":
-		return evalPing(cmd.Args, cli)
-	case "GET":
-		return evalGET(cmd.Args, cli)
-	case "SET":
-		return evalSET(cmd.Args, cli)
-	case "TTL":
-		return evalTTL(cmd.Args, cli)
-	case "DEL":
-		return evalDEL(cmd.Args, cli)
-	case "EXPIRE":
-		return evalEXPIRE(cmd.Args, cli)
-	default:
-		return evalPing(cmd.Args, cli)
+func EvalAndRespond(cmds RedisCmds, cli io.ReadWriter) {
+	// Buffer responses
+	var response []byte
+	buf := bytes.NewBuffer(response)
+
+	for _, cmd := range cmds {
+		// evaluate all cmds one by one
+		switch cmd.Cmd {
+		case "PING":
+			buf.Write(evalPing(cmd.Args))
+		case "GET":
+			buf.Write(evalGET(cmd.Args))
+		case "SET":
+			buf.Write(evalSET(cmd.Args))
+		case "TTL":
+			buf.Write(evalTTL(cmd.Args))
+		case "DEL":
+			buf.Write(evalDEL(cmd.Args))
+		case "EXPIRE":
+			buf.Write(evalEXPIRE(cmd.Args))
+		default:
+			buf.Write(evalPing(cmd.Args))
+		}
 	}
+	cli.Write(buf.Bytes())
 }

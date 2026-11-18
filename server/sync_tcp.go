@@ -16,14 +16,19 @@ func respondError(err error, cli io.ReadWriter) {
 	_, _ = fmt.Fprintf(cli, "-%s\r\n", err)
 }
 
-func respond(cmd *core.RedisCmd, cli io.ReadWriter) {
-	err := core.EvalAndRespond(cmd, cli)
-	if err != nil {
-		respondError(err, cli)
-	}
+func respond(cmd core.RedisCmds, cli io.ReadWriter) {
+	core.EvalAndRespond(cmd, cli)
 }
 
-func readCommand(cli io.ReadWriter) (*core.RedisCmd, error) {
+func toArrayString(ai []any) ([]string, error) {
+	as := make([]string, len(ai))
+	for i := range ai {
+		as[i] = ai[i].(string)
+	}
+	return as, nil
+}
+
+func readCommands(cli io.ReadWriter) (core.RedisCmds, error) {
 	// TODO: Max read in one shot is 512 bytes
 	// To allow input > 512 bytes , then repeated read until
 	// we get EOF or designated delimiter
@@ -33,14 +38,22 @@ func readCommand(cli io.ReadWriter) (*core.RedisCmd, error) {
 	if err != nil {
 		return nil, err
 	}
-	tokens, err := core.DecodeArrayString(buf[:n])
+	values, err := core.Decode(buf[:n])
 	if err != nil {
 		return nil, err
 	}
-	return &core.RedisCmd{
-		Cmd:  strings.ToUpper(tokens[0]),
-		Args: tokens[1:],
-	}, nil
+	cmds := make([]*core.RedisCmd, 0)
+	for _, value := range values {
+		tokens, err := toArrayString(value.([]any))
+		if err != nil {
+			return nil, err
+		}
+		cmds = append(cmds, &core.RedisCmd{
+			Cmd:  strings.ToUpper(tokens[0]),
+			Args: tokens[1:],
+		})
+	}
+	return cmds, nil
 }
 
 func RunSyncTCPServer() {
@@ -62,7 +75,7 @@ func RunSyncTCPServer() {
 		log.Println("client connected with address:", cli.RemoteAddr(), "concurrent clients", numClients)
 		for {
 			// over the socket, continously read the command and print it out
-			cmd, err := readCommand(cli)
+			cmd, err := readCommands(cli)
 			if err != nil {
 				cli.Close()
 				numClients--

@@ -81,7 +81,7 @@ func readArray(data []byte) (any, int, error) {
 }
 
 func DecodeArrayString(data []byte) ([]string, error) {
-	val, err := Decode(data)
+	val, _, err := DecodeOne(data)
 	if err != nil {
 		return nil, err
 	}
@@ -112,12 +112,21 @@ func DecodeOne(data []byte) (any, int, error) {
 	return nil, 0, nil
 }
 
-func Decode(data []byte) (any, error) {
+func Decode(data []byte) ([]any, error) {
 	if len(data) == 0 {
 		return nil, errors.New("no data")
 	}
-	value, _, err := DecodeOne(data)
-	return value, err
+	values := make([]any, 0)
+	index := 0
+	for index < len(data) {
+		value, delta, err := DecodeOne(data[index:])
+		if err != nil {
+			return values, err
+		}
+		index = index + delta
+		values = append(values, value)
+	}
+	return values, nil
 }
 
 func Encode(val any, isSimple bool) []byte {

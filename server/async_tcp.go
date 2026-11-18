@@ -10,9 +10,11 @@ import (
 	"github.com/shreeda448/cacheGo.git/core"
 )
 
-var numClients int = 0
-var cronFrequency time.Duration = 1 * time.Second
-var lastCronExecTime time.Time = time.Now()
+var (
+	numClients       int           = 0
+	cronFrequency    time.Duration = 1 * time.Second
+	lastCronExecTime time.Time     = time.Now()
+)
 
 func RunAsyncTCPServer() error {
 	log.Println("starting an asynchronous TCP server on", config.Host, config.Port)
@@ -106,13 +108,13 @@ func RunAsyncTCPServer() error {
 				}
 			} else {
 				comm := core.FDComm{Fd: int(events[i].Fd)}
-				cmd, err := readCommand(comm)
+				cmds, err := readCommands(comm)
 				if err != nil {
 					syscall.Close(int(events[i].Fd))
 					numClients--
 					continue
 				}
-				respond(cmd, comm)
+				respond(cmds, comm)
 			}
 		}
 	}

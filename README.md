@@ -21,6 +21,7 @@ go build
 - Expire command
 - Auto deletion after expiration
 - Lazy deletion
+- Pipelining commands
 
 ### Future Features
 
